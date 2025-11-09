@@ -1,0 +1,105 @@
+# 1️⃣ Import libraries
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator, image
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# 2️⃣ Dataset paths
+train_dir = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\train"
+val_dir   = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\test"
+
+# 3️⃣ Data preprocessing & augmentation
+train_gen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=40,
+    width_shift_range=0.3,
+    height_shift_range=0.3,
+    shear_range=0.3,
+    zoom_range=0.3,
+    horizontal_flip=True
+)
+
+val_gen = ImageDataGenerator(rescale=1./255)
+
+train_data = train_gen.flow_from_directory(train_dir, target_size=(224, 224),
+                                           batch_size=32, class_mode='categorical')
+val_data = val_gen.flow_from_directory(val_dir, target_size=(224, 224),
+                                       batch_size=32, class_mode='categorical')
+
+# 4️⃣ Load pre-trained DenseNet121
+base_model = tf.keras.applications.DenseNet121(include_top=False,
+                                               weights='imagenet',
+                                               input_shape=(224, 224, 3))
+
+# 5️⃣ Freeze initial layers
+for layer in base_model.layers[:300]:
+    layer.trainable = False
+
+# 6️⃣ Add custom classifier
+model = models.Sequential([
+    base_model,
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(256, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)),
+    layers.Dropout(0.5),
+    layers.Dense(train_data.num_classes, activation='softmax')
+])
+
+# 7️⃣ Compile and set early stopping
+model.compile(optimizer=tf.keras.optimizers.Adam(1e-4),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+# 8️⃣ Train the classifier
+history = model.fit(train_data, validation_data=val_data, epochs=5, callbacks=[early_stop])
+
+# 9️⃣ Fine-tune top layers
+for layer in base_model.layers[300:]:
+    layer.trainable = True
+model.compile(optimizer=tf.keras.optimizers.Adam(1e-5),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+history_fine = model.fit(train_data, validation_data=val_data, epochs=5, callbacks=[early_stop])
+
+# 🔟 Evaluate model
+loss, acc = model.evaluate(val_data)
+print(f"\n✅ Validation Accuracy: {acc*100:.2f}%")
+
+# 1️⃣1️⃣ Plot accuracy and loss
+plt.figure(figsize=(10,4))
+plt.subplot(1,2,1)
+plt.plot(history.history['accuracy'] + history_fine.history['accuracy'], label='Train')
+plt.plot(history.history['val_accuracy'] + history_fine.history['val_accuracy'], label='Val')
+plt.title('Accuracy'); plt.legend()
+
+plt.subplot(1,2,2)
+plt.plot(history.history['loss'] + history_fine.history['loss'], label='Train Loss')
+plt.plot(history.history['val_loss'] + history_fine.history['val_loss'], label='Val Loss')
+plt.title('Loss'); plt.legend()
+plt.show()
+
+# 1️⃣2️⃣ Confusion matrix & report
+val_data.reset()
+y_pred = np.argmax(model.predict(val_data), axis=1)
+y_true = val_data.classes
+class_names = list(val_data.class_indices.keys())
+
+cm = confusion_matrix(y_true, y_pred)
+sns.heatmap(cm, annot=True, fmt='d', xticklabels=class_names, yticklabels=class_names, cmap='Blues')
+plt.xlabel('Predicted'); plt.ylabel('True'); plt.title('Confusion Matrix'); plt.show()
+
+print("\nClassification Report:\n", classification_report(y_true, y_pred, target_names=class_names))
+
+# 1️⃣3️⃣ Predict on a single image
+img_path = r"C:\Users\KIRAN\Downloads\archive\Small Object dataset\test\fly\fly1.jpg"
+img = image.load_img(img_path, target_size=(224, 224))
+img_array = image.img_to_array(img) / 255.0
+img_array = np.expand_dims(img_array, axis=0)
+
+pred = model.predict(img_array)
+predicted_class = class_names[np.argmax(pred)]
+print("\nPredicted Object:", predicted_class)
