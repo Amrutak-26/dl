@@ -1,0 +1,56 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Dense, Lambda
+from sklearn.metrics.pairwise import cosine_similarity
+
+# 1️⃣ Sample corpus
+corpus = [
+    "Machine learning is fascinating",
+    "Deep learning drives artificial intelligence",
+    "Natural language processing is part of AI",
+    "Neural networks are powerful"
+]
+
+# 2️⃣ Tokenize text
+tok = Tokenizer()
+tok.fit_on_texts(corpus)
+w2i, i2w = tok.word_index, {v: k for k, v in tok.word_index.items()}
+vocab_size = len(w2i) + 1
+seqs = tok.texts_to_sequences(corpus)
+
+# 3️⃣ Create skip-gram pairs
+window = 2
+pairs = [(sequence[i], sequence[j])
+         for sequence in seqs
+         for i in range(len(sequence))
+         for j in range(max(0, i - window), min(len(sequence), i + window + 1))
+         if i != j]
+X, y = np.array([p[0] for p in pairs]), np.array([p[1] for p in pairs])
+
+# 4️⃣ Define and train simple Word2Vec model
+embed_dim = 8
+model = Sequential([
+    Embedding(vocab_size, embed_dim, input_length=1),
+    Lambda(lambda x: tf.reduce_mean(x, axis=1)),
+    Dense(vocab_size, activation='softmax')
+])
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam')
+model.fit(X, y, epochs=200, verbose=0)
+
+# 5️⃣ Extract embeddings
+emb = model.layers[0].get_weights()[0]
+
+# 6️⃣ Find similar words
+def similar(word, top_n=5):
+    if word not in w2i: return "Word not in vocab."
+    vec = emb[w2i[word]].reshape(1, -1)
+    sims = cosine_similarity(vec, emb)[0]
+    idxs = sims.argsort()[-top_n:][::-1]
+    print(f"\nTop similar words to '{word}':")
+    for i in idxs:
+        if i in i2w: print(f"{i2w[i]} ({sims[i]:.3f})")
+
+similar("learning")
+similar("neural")
