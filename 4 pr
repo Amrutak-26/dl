@@ -1,0 +1,68 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, confusion_matrix
+
+# 1️⃣ Load dataset
+data = pd.read_csv("creditcard.csv")
+X, y = data.drop('Class', axis=1), data['Class']
+
+# 2️⃣ Normalize & split data
+X_scaled = StandardScaler().fit_transform(X)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+# 3️⃣ Use only normal transactions (Class=0) for training
+X_train_normal = X_train[y_train == 0]
+
+# 4️⃣ Build Autoencoder
+input_dim = X_train_normal.shape[1]
+autoencoder = tf.keras.Sequential([
+    tf.keras.layers.Input(shape=(input_dim,)),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(8, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(input_dim, activation='sigmoid')
+])
+
+autoencoder.compile(optimizer='adam', loss='mse')
+
+# 5️⃣ Train
+history = autoencoder.fit(X_train_normal, X_train_normal,
+                          epochs=50, batch_size=256,
+                          validation_data=(X_test, X_test),
+                          shuffle=True, verbose=0)
+
+# 6️⃣ Plot training loss
+plt.plot(history.history['loss'], label='Train')
+plt.plot(history.history['val_loss'], label='Validation')
+plt.title("Training vs Validation Loss")
+plt.legend(); plt.show()
+
+# 7️⃣ Compute reconstruction error
+X_test_pred = autoencoder.predict(X_test)
+mse = np.mean(np.square(X_test - X_test_pred), axis=1)
+
+# 8️⃣ Define threshold and classify
+threshold = np.percentile(mse[y_test == 0], 95)
+y_pred = (mse > threshold).astype(int)
+
+# 9️⃣ Evaluate
+print("Classification Report:\n", classification_report(y_test, y_pred))
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+
+sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d',
+            cmap='Blues', xticklabels=['Normal', 'Fraud'], yticklabels=['Normal', 'Fraud'])
+plt.title("Confusion Matrix")
+plt.show()
+
+# 🔟 Visualize error distribution
+plt.hist(mse[y_test == 0], bins=50, alpha=0.6, label='Normal')
+plt.hist(mse[y_test == 1], bins=50, alpha=0.6, label='Fraud')
+plt.axvline(threshold, color='r', linestyle='--', label='Threshold')
+plt.legend(); plt.title("Reconstruction Error Distribution"); plt.show()
