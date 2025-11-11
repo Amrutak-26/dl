@@ -33,10 +33,7 @@ autoencoder = tf.keras.Sequential([
 autoencoder.compile(optimizer='adam', loss='mse')
 
 # 5️⃣ Train
-history = autoencoder.fit(X_train_normal, X_train_normal,
-                          epochs=50, batch_size=256,
-                          validation_data=(X_test, X_test),
-                          shuffle=True, verbose=0)
+autoencoder.fit(X_train_normal, X_train_normal, epochs=10, shuffle=True, batch_size=64)
 
 # 6️⃣ Plot training loss
 plt.plot(history.history['loss'], label='Train')
