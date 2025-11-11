@@ -57,9 +57,3 @@ sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d',
             cmap='Blues', xticklabels=['Normal', 'Fraud'], yticklabels=['Normal', 'Fraud'])
 plt.title("Confusion Matrix")
 plt.show()
-
-# 🔟 Visualize error distribution
-plt.hist(mse[y_test == 0], bins=50, alpha=0.6, label='Normal')
-plt.hist(mse[y_test == 1], bins=50, alpha=0.6, label='Fraud')
-plt.axvline(threshold, color='r', linestyle='--', label='Threshold')
-plt.legend(); plt.title("Reconstruction Error Distribution"); plt.show()
